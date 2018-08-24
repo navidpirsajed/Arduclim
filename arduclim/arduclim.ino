@@ -1,6 +1,5 @@
 /*
    Arduclim mk II         written by navid
-   test 2
    
 */
 
