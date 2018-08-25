@@ -1,6 +1,5 @@
 /*
-   Arduclim mk II         written by navid
-   
+   Arduclim mk II         written by navid 
 */
 
 //libraries to be added
@@ -354,36 +353,34 @@ void screen() {
 }
 
 void button_value() {
+
   if (button > 1004  && button < 1010) {
+
     buttpress = 6;
-    return;
-  }
 
-  if (button > 850 && button < 960) {
+  }else if (button > 850 && button < 960) {
+
     buttpress = 5;
-    return;
-  }
 
-  if (button > 400 && button < 600) {
+  }else if (button > 400 && button < 600) {
+
     buttpress = 4;
-    return;
-  }
 
-  if (button > 294 && button < 354) {
+  }else if (button > 294 && button < 354) {
+
     buttpress = 3;
-    return;
-  }
 
-  if (button > 675 && button < 730) {
+  }else if (button > 675 && button < 730) {
+
     buttpress = 2;
-    return;
-  }
+    
+  }else if (button > 60 && button < 150) {
 
-  if (button > 60 && button < 150) {
     buttpress = 1;
-    return;
+
   } else {
+
     buttpress = 0;
-    return;
+
   }
 }
