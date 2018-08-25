@@ -1,0 +1,10 @@
+
+*.vcxproj
+*.xml
+*.filters
+*.h
+*.d
+*.o
+*.hex
+*.buildinfo
+*.elf
