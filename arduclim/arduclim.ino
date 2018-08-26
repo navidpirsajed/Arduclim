@@ -1,89 +1,93 @@
 /*
-   Arduclim mk II         written by navid 
+   Arduclim mk II         written by navid
 */
 
 //libraries to be added
-#include <HID.h>
-#include <SPI.h>
 #include <EEPROM.h>
+#include <SPI.h>
 #include <Wire.h>
-#include <Arduino.h>
-#include <U8x8lib.h>
-U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#include <MemoryFree.h>					//only include when debugging sram
 
 
 //configurations
-const int compressor_interval = 20000;          //how often can the compressor can be switched in ms
+int compressor_interval;          //how often can the compressor can be switched in ms
 
 
 //Pin setup
-const int photoresistor_pin = A1;
-const int temp_in_pin = A1;
-const int button_pin = A2;
-const int temp_fan_pin = A3;
-const int compressor_pin = 12;
-const int fanspeed_pin = 9;
+//analogue
+const byte photoresistor_pin = 1;
+const byte temp_in_pin = 0;
+const byte button_pin = 2;
+//digital
+const byte temp_fan_pin = 3;
+const byte compressor_pin = 12;
+const byte fanspeed_pin = 9;
 
 //EEPROM addresses
-int ee_ttemp = 0;
-int ee_setfanspeed = 1;
-int ee_lighttrig = 2;
+byte ee_ttemp = 0;
+byte ee_setfanspeed = 1;
+byte ee_lighttrig = 2;
+byte ee_compressor_interval = 3;
 
 //OLED configuration
-
+#define OLED_RESET 4
+Adafruit_SSD1306 display(OLED_RESET);
 
 //variables related to buttons
-int button;
-int buttpress;
+short button;
+byte buttpress;
 
 //variables related to photoresistor
-int photoresistor;
-int lighttrig;
+byte photoresistor;
+byte lighttrig;
 
 //variables related to GUI
-int s;
-int fandisp;          //fan speed converted from either chartspeed or setfanspeed depending on fanstate ranging from 0 to 100
+byte s;
+byte s3 = 1;
+byte fandisp;          //fan speed converted from either chartspeed or setfanspeed depending on fanstate ranging from 0 to 100
 
 //variables related to fan controller
-int fanstate;
-int setfanspeed;          //speed selected by the user ranging from 0 to 100
-int fanspeed;         //actual fan speed ranging from 0 to 255
-int chartspeed;
+boolean fanstate;
+byte setfanspeed;          //speed selected by the user ranging from 0 to 100
+byte fanspeed;         //actual fan speed ranging from 0 to 255
+byte chartspeed;
 
 //variables related to compressor controller
-int ic;
-int compressor;
-int compressor_previous;
+boolean ic;
 unsigned long compressor_timer = 0;
 unsigned long currentMillis_compressor;
 
 //variables related to fan probe
-int tempi;
-int ttemp;
-int tidelta;
+float ttemp;
+byte tidelta;
 int Vo;
 float tempfua = 0;
 float tempfcollector = 0;
-int itf;
+byte itf;
 float R1 = 10000;
 float logR2, R2, T, tempf, Tf;
 float c1 = 1.009249522e-03, c2 = 2.378405444e-04, c3 = 2.019202697e-07;
 
-
+//variables related to recirculation
+boolean resirc;
 
 
 
 
 void setup() {
   //loads all the saved values from the EEPROM
-  ttemp = EEPROM.read(ee_ttemp);
+  EEPROM.get(ee_ttemp, ttemp);
   setfanspeed = EEPROM.read(ee_setfanspeed);
   lighttrig = EEPROM.read(ee_lighttrig);
+  EEPROM.get(ee_compressor_interval, compressor_interval);
 
   //OLED setup
-  u8x8.begin();
-  u8x8.setPowerSave(0);
-  u8x8.clearDisplay();
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.display();
+  display.clearDisplay();
 
   //pin mode setup
   pinMode(compressor_pin, OUTPUT);
@@ -109,19 +113,19 @@ void loop() {
 }
 
 float temp_fan() {         //retrieves the temperature from the probe in the fan box
-	Vo = analogRead(temp_fan_pin);
-	R2 = R1 * (1023.0 / (float)Vo - 1.0);
-	logR2 = log(R2);
-	T = (1.0 / (c1 + c2 * logR2 + c3 * logR2 * logR2 * logR2));
-	tempfua = T - 273.15;
-	tempfcollector = tempfcollector + tempfua;
-	itf++;
-	if (itf >= 50) {
-		tempf = tempfcollector / itf;
-		tempfcollector = 0;
-		itf = 0;
-		return;
-	}
+  Vo = analogRead(temp_fan_pin);
+  R2 = R1 * (1023.0 / (float)Vo - 1.0);
+  logR2 = log(R2);
+  T = (1.0 / (c1 + c2 * logR2 + c3 * logR2 * logR2 * logR2));
+  tempfua = T - 273.15;
+  tempfcollector = tempfcollector + tempfua;
+  itf++;
+  if (itf >= 50) {
+    tempf = tempfcollector / itf;
+    tempfcollector = 0;
+    itf = 0;
+    return;
+  }
 }
 void value_refresh() {
   button = analogRead(button_pin);
@@ -147,20 +151,16 @@ void controller() {
       ic = 1;
     }
   }
-  if (compressor - compressor_previous != 0) {
-    ic = 0;
-  }
 
   // fan speed controller
-  compressor_previous = compressor;
   if ( ic == 1) {
     if (tidelta > 0) {
       digitalWrite(compressor_pin, 0);
-      compressor = 1;
+      ic = 0;
     }
     if (tidelta <= 0) {
       digitalWrite(compressor_pin, 1);
-      compressor = 0;
+      ic = 0;
     }
   }
   if ( ic == 0) {
@@ -170,9 +170,7 @@ void controller() {
       ic = 1;
     }
   }
-  if (compressor - compressor_previous != 0) {
-    ic = 0;
-  }
+
 
 
   if (setfanspeed >= 0 && setfanspeed <= 100) {
@@ -262,55 +260,85 @@ void speedchart() {
 }
 
 void debug_ValueSerial() {
-  Serial.print("Button value: ");
+  Serial.print(F("Button value: "));
   Serial.print(button);
-  Serial.print(" Button pressed: ");
+  Serial.print(F(" Button pressed: "));
   Serial.print(buttpress);
-  Serial.print(" temperature: ");
-  Serial.print(tempf);
-  Serial.print(" light level: ");
+  Serial.print(F(" temperature: "));
+  Serial.print(tempf, 1);
+  Serial.print(F(" light level: "));
   Serial.print(photoresistor);
-  Serial.print(" setfanspeed: ");
+  Serial.print(F(" setfanspeed: "));
   Serial.print(setfanspeed);
-  Serial.print(" fanspeed: ");
+  Serial.print(F(" fanspeed: "));
   Serial.print(fanspeed);
-  Serial.print(" compressor_timer: ");
+  Serial.print(F(" compressor_timer: "));
   Serial.print(compressor_timer);
-  Serial.print(" ic: ");
-  Serial.println(ic);
+  Serial.print(F(" ic: "));
+  Serial.println(freeMemory());
 
 }
 
 void screen() {
   if (s == 0) {         //boot menu
-	  u8x8.setFont(u8x8_font_pxplustandynewtv_f);
-	  u8x8.draw2x2String(0, 0, "Arduclim");
-	  u8x8.drawString(12, 7, "v0.6");
-	  delay(2000);
-	  u8x8.clearDisplay();
-	  s = 1;
+    display.setTextSize(2);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 0);
+    display.println(F("Arduclim"));
+    display.println(F("v0.6"));
+    display.display();
+    delay(1000);
+    display.clearDisplay();
+    s = 1;
   }
   if (s == 1) {
-	  u8x8.setFont(u8x8_font_pxplustandynewtv_f);
-	  u8x8.setCursor(0, 0);
-	  u8x8.setTextSize(1);
-	  u8x8.print(tempf);
+    display.setTextColor(WHITE, BLACK);
+    display.setCursor(0, 12);
+    display.setTextSize(1);
+    display.println(F("room"));
+    display.print(F("temp:"));
+    display.setTextSize(4);
+    display.setCursor(30, 0);
+    display.print(tempf, 1);
+    display.setCursor(0, 32);
+    display.setTextSize(1);
+    display.print(F("Target:"));
+    display.print(ttemp, 1);
+    display.println(F("C"));
+    display.print(F("fan speed: "));
+    display.print(fandisp);
+    display.print(F("% "));
+    if (fanstate == 1) {
+      display.setTextColor(WHITE, BLACK);
+      display.println(F("Auto "));
+    } else {
+      display.setTextColor(WHITE, BLACK);
+      display.println(F("Man  "));
+    }
+    display.print(F("recirculation: "));
+    if (resirc == 1) {
+      display.setTextColor(WHITE, BLACK);
+      display.print(F("On "));
+    }
+    else {
+      display.setTextColor(WHITE, BLACK);
+      display.print(F("Off"));
+    }
+    display.display();
     if (buttpress == 1) {
-      ttemp = ttemp + 1;
+      ttemp = ttemp + 0.5;
       if (ttemp > 33) {
         ttemp = 33;
       }
-      EEPROM.write(ee_ttemp, ttemp);
-      delay(75);
+      EEPROM.put(ee_ttemp, ttemp);
       return;
     }
     if (buttpress == 2) {
-      ttemp = ttemp - 1;
+      ttemp = ttemp - 0.5;
       if (ttemp < 16) {
         ttemp = 16;
       }
-      EEPROM.write(ee_ttemp, ttemp);
-      delay(75);
+      EEPROM.put(ee_ttemp, ttemp);
       return;
     }
     if (buttpress == 3) {
@@ -318,8 +346,7 @@ void screen() {
       if (setfanspeed > 105) {
         setfanspeed = 105;
       }
-      EEPROM.write(ee_setfanspeed, setfanspeed);
-      delay(50);
+      EEPROM.update(ee_setfanspeed, setfanspeed);
       return;
     }
     if (buttpress == 4) {
@@ -327,40 +354,96 @@ void screen() {
       if (setfanspeed < 0) {
         setfanspeed = 0;
       }
-      EEPROM.write(ee_setfanspeed, setfanspeed);
-      delay(75);
-      return;
-    }
-    if (buttpress == 5) {
-      s = s + 1;
-      delay(75);
-      return;
-    }
-  }
-  if (s == 2) {
-    if (buttpress == 1) {
-      lighttrig = lighttrig + 1;
-      if (lighttrig > 255) {
-        lighttrig = 255;
-      }
-      EEPROM.write(ee_lighttrig, lighttrig);
-      delay(75);
-      return;
-    }
-    if (buttpress == 2) {
-      lighttrig = lighttrig - 1;
-      if (lighttrig < 0) {
-        lighttrig = 0;
-      }
-      EEPROM.write(ee_lighttrig, lighttrig);
-      delay(75);
+      EEPROM.update(ee_setfanspeed, setfanspeed);
+
       return;
     }
     if (buttpress == 6) {
-      s = 1;
-      delay(75);
-      return;
+      display.clearDisplay();
+      s = 2;
     }
+  }
+  if (s == 2) {					//Home Page
+    display.setTextColor(WHITE, BLACK);
+    display.setCursor(0,  0);
+    display.setTextSize(1);
+    display.println(F("1: Default Screen"));
+    display.println(F("2: Debug Monitor"));
+    display.println(F("3: Configuration"));
+    display.display();
+    if (buttpress == 1) {
+      display.clearDisplay();
+      s = 1;
+    }
+	if (buttpress == 2) {
+		display.clearDisplay();
+		s = 3;
+	}
+	if (buttpress == 3) {
+		display.clearDisplay();
+		s = 4;
+	}
+  }
+  if (s == 3) {					//Debug Monitor
+    if (s3 == 1) {
+      display.setTextColor(WHITE, BLACK);
+      display.setCursor(0, 0);
+      display.setTextSize(1);
+      display.print(F("Button value: "));
+      display.println(button);
+      display.print(F("Button pressed: "));
+      display.println(buttpress);
+      display.print(F("temperature: "));
+      display.println(tempf, 1);
+      display.print(F("light level: "));
+      display.println(photoresistor);
+      display.print(F("setfanspeed: "));
+      display.println(setfanspeed);
+      display.print(F("fanspeed: "));
+      display.println(fanspeed);
+      display.print(F("ct: "));
+      display.println(compressor_timer);
+      display.print(F("free memory: "));
+      display.println(freeMemory());
+	  display.display();
+	  if (buttpress == 5) {
+		  display.clearDisplay();
+		  s3 = 2;
+	  }
+    }
+	if (s3 == 2) {
+
+		if (buttpress == 5) {
+			display.clearDisplay();
+			s3 = 1;
+		}
+
+	}
+	if (buttpress == 6) {
+		display.clearDisplay();
+		s = 2;
+	}
+  }
+  if (s == 4) {
+	  display.setTextColor(WHITE, BLACK);
+	  display.setCursor(0, 0);
+	  display.setTextSize(1);
+	  display.print(F("Compressor Interval: "));
+	  display.print(compressor_interval/1000);
+	  display.print(F("S"));
+	  display.display();
+	  if (buttpress == 1) {
+		  compressor_interval = compressor_interval + 1000;
+		  EEPROM.put(ee_compressor_interval, compressor_interval);
+	  }
+	  if (buttpress == 2) {
+		  compressor_interval = compressor_interval - 1000;
+		  EEPROM.put(ee_compressor_interval, compressor_interval);
+	  }
+	  if (buttpress == 6) {
+		  display.clearDisplay();
+		  s = 2;
+	  }
   }
 }
 
@@ -370,23 +453,23 @@ void button_value() {
 
     buttpress = 6;
 
-  }else if (button > 500 && button < 600) {
+  } else if (button > 500 && button < 600) {
 
     buttpress = 5;
 
-  }else if (button > 200 && button < 299) {
+  } else if (button > 200 && button < 299) {
 
     buttpress = 4;
 
-  }else if (button > 650 && button < 750) {
+  } else if (button > 650 && button < 750) {
 
     buttpress = 3;
 
-  }else if (button >= 0 && button < 50) {
+  } else if (button < 50) {
 
     buttpress = 2;
-    
-  }else if (button > 800 && button < 900) {
+
+  } else if (button > 800 && button < 900) {
 
     buttpress = 1;
 
