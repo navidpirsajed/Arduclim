@@ -3,6 +3,7 @@
 */
 
 //libraries to be added
+#include <HID.h>
 #include <SPI.h>
 #include <EEPROM.h>
 #include <Wire.h>
@@ -14,8 +15,9 @@ U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
 //configurations
 const int compressor_interval = 20000;          //how often can the compressor can be switched in ms
 
+
 //Pin setup
-const int photoresistor_pin = A0;
+const int photoresistor_pin = A1;
 const int temp_in_pin = A1;
 const int button_pin = A2;
 const int temp_fan_pin = A3;
@@ -69,6 +71,9 @@ float c1 = 1.009249522e-03, c2 = 2.378405444e-04, c3 = 2.019202697e-07;
 
 
 
+
+
+
 void setup() {
   //loads all the saved values from the EEPROM
   ttemp = EEPROM.read(ee_ttemp);
@@ -78,7 +83,8 @@ void setup() {
   //OLED setup
   u8x8.begin();
   u8x8.setPowerSave(0);
-  
+  u8x8.clearDisplay();
+
   //pin mode setup
   pinMode(compressor_pin, OUTPUT);
   pinMode(fanspeed_pin, OUTPUT);
@@ -97,28 +103,26 @@ void loop() {
   value_refresh();         //refreshes all values
   temp_fan();
   button_value();        //button reader
-  //screen();
+  screen();
   speedchart();
   controller();
 }
 
 float temp_fan() {         //retrieves the temperature from the probe in the fan box
-  Vo = analogRead(temp_fan_pin);
-  R2 = R1 * (1023.0 / (float)Vo - 1.0);
-  logR2 = log(R2);
-  T = (1.0 / (c1 + c2 * logR2 + c3 * logR2 * logR2 * logR2));
-  tempfua = T - 273.15;
-  tempfcollector = tempfcollector + tempfua;
-  itf++;
-  if (itf >= 100) {
-    itf = itf + 1;
-    tempf = tempfcollector / itf;
-    tempfcollector = tempf;
-    itf = 0;
-    return;
-  }
+	Vo = analogRead(temp_fan_pin);
+	R2 = R1 * (1023.0 / (float)Vo - 1.0);
+	logR2 = log(R2);
+	T = (1.0 / (c1 + c2 * logR2 + c3 * logR2 * logR2 * logR2));
+	tempfua = T - 273.15;
+	tempfcollector = tempfcollector + tempfua;
+	itf++;
+	if (itf >= 50) {
+		tempf = tempfcollector / itf;
+		tempfcollector = 0;
+		itf = 0;
+		return;
+	}
 }
-
 void value_refresh() {
   button = analogRead(button_pin);
   photoresistor = analogRead(photoresistor_pin) / 4.02;
@@ -279,10 +283,18 @@ void debug_ValueSerial() {
 
 void screen() {
   if (s == 0) {         //boot menu
-    s = 1;
+	  u8x8.setFont(u8x8_font_pxplustandynewtv_f);
+	  u8x8.draw2x2String(0, 0, "Arduclim");
+	  u8x8.drawString(12, 7, "v0.6");
+	  delay(2000);
+	  u8x8.clearDisplay();
+	  s = 1;
   }
   if (s == 1) {
-    
+	  u8x8.setFont(u8x8_font_pxplustandynewtv_f);
+	  u8x8.setCursor(0, 0);
+	  u8x8.setTextSize(1);
+	  u8x8.print(tempf);
     if (buttpress == 1) {
       ttemp = ttemp + 1;
       if (ttemp > 33) {
@@ -354,27 +366,27 @@ void screen() {
 
 void button_value() {
 
-  if (button > 1004  && button < 1010) {
+  if (button > 300  && button < 400) {
 
     buttpress = 6;
 
-  }else if (button > 850 && button < 960) {
+  }else if (button > 500 && button < 600) {
 
     buttpress = 5;
 
-  }else if (button > 400 && button < 600) {
+  }else if (button > 200 && button < 299) {
 
     buttpress = 4;
 
-  }else if (button > 294 && button < 354) {
+  }else if (button > 650 && button < 750) {
 
     buttpress = 3;
 
-  }else if (button > 675 && button < 730) {
+  }else if (button >= 0 && button < 50) {
 
     buttpress = 2;
     
-  }else if (button > 60 && button < 150) {
+  }else if (button > 800 && button < 900) {
 
     buttpress = 1;
 
