@@ -19,11 +19,11 @@ int compressor_interval;          //how often can the compressor can be switched
 //Pin setup
 //analogue
 const byte photoresistor_pin = 1;
-const byte temp_in_pin = 0;
+const byte temp_in_pin = 3;
 const byte button_pin = 2;
 //digital
 const byte temp_fan_pin = 3;
-const byte compressor_pin = 12;
+const byte compressor_pin = 8;
 const byte fanspeed_pin = 9;
 
 //EEPROM addresses
@@ -62,7 +62,7 @@ unsigned long currentMillis_compressor;
 
 //variables related to fan probe
 float ttemp;
-byte tidelta;
+float tidelta;
 int Vo;
 float tempfua = 0;
 float tempfcollector = 0;
@@ -74,7 +74,7 @@ float c1 = 1.009249522e-03, c2 = 2.378405444e-04, c3 = 2.019202697e-07;
 //variables related to recirculation
 boolean resirc;
 
-
+//misc. variables
 
 
 void setup() {
@@ -103,7 +103,7 @@ void setup() {
 void loop() {
   tidelta = tempf - ttemp;
 
-  debug_ValueSerial();          //uncomment to enable printing values to serial
+  //debug_ValueSerial();          //uncomment to enable printing values to serial
   value_refresh();         //refreshes all values
   temp_fan();
   button_value();        //button reader
@@ -259,7 +259,7 @@ void speedchart() {
   }
 }
 
-void debug_ValueSerial() {
+/*void debug_ValueSerial() {
   Serial.print(F("Button value: "));
   Serial.print(button);
   Serial.print(F(" Button pressed: "));
@@ -277,7 +277,7 @@ void debug_ValueSerial() {
   Serial.print(F(" ic: "));
   Serial.println(freeMemory());
 
-}
+}*/
 
 void screen() {
   if (s == 0) {         //boot menu
@@ -331,15 +331,13 @@ void screen() {
         ttemp = 33;
       }
       EEPROM.put(ee_ttemp, ttemp);
-      return;
     }
     if (buttpress == 2) {
       ttemp = ttemp - 0.5;
       if (ttemp < 16) {
         ttemp = 16;
       }
-      EEPROM.put(ee_ttemp, ttemp);
-      return;
+	  EEPROM.put(ee_ttemp, ttemp);
     }
     if (buttpress == 3) {
       setfanspeed = setfanspeed + 5;
@@ -347,7 +345,6 @@ void screen() {
         setfanspeed = 105;
       }
       EEPROM.update(ee_setfanspeed, setfanspeed);
-      return;
     }
     if (buttpress == 4) {
       setfanspeed = setfanspeed - 5;
@@ -355,8 +352,6 @@ void screen() {
         setfanspeed = 0;
       }
       EEPROM.update(ee_setfanspeed, setfanspeed);
-
-      return;
     }
     if (buttpress == 6) {
       display.clearDisplay();
@@ -412,7 +407,14 @@ void screen() {
 	  }
     }
 	if (s3 == 2) {
-
+		display.setTextColor(WHITE, BLACK);
+		display.setCursor(0, 0);
+		display.setTextSize(1);
+		display.print(F("ic: "));
+		display.println(ic);
+		display.print(F("ti delta: "));
+		display.println(tidelta);
+		display.display();
 		if (buttpress == 5) {
 			display.clearDisplay();
 			s3 = 1;
