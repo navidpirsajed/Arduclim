@@ -331,6 +331,7 @@ void screen() {
         ttemp = 33;
       }
       EEPROM.put(ee_ttemp, ttemp);
+	  delay(50);
     }
     if (buttpress == 2) {
       ttemp = ttemp - 0.5;
@@ -338,6 +339,7 @@ void screen() {
         ttemp = 16;
       }
 	  EEPROM.put(ee_ttemp, ttemp);
+	  delay(50);
     }
     if (buttpress == 3) {
       setfanspeed = setfanspeed + 5;
@@ -345,6 +347,7 @@ void screen() {
         setfanspeed = 105;
       }
       EEPROM.update(ee_setfanspeed, setfanspeed);
+	  delay(50);
     }
     if (buttpress == 4) {
       setfanspeed = setfanspeed - 5;
@@ -352,6 +355,7 @@ void screen() {
         setfanspeed = 0;
       }
       EEPROM.update(ee_setfanspeed, setfanspeed);
+	  delay(50);
     }
     if (buttpress == 6) {
       display.clearDisplay();
@@ -437,10 +441,12 @@ void screen() {
 	  if (buttpress == 1) {
 		  compressor_interval = compressor_interval + 1000;
 		  EEPROM.put(ee_compressor_interval, compressor_interval);
+		  delay(50);
 	  }
 	  if (buttpress == 2) {
 		  compressor_interval = compressor_interval - 1000;
 		  EEPROM.put(ee_compressor_interval, compressor_interval);
+		  delay(50);
 	  }
 	  if (buttpress == 6) {
 		  display.clearDisplay();
